@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minimalist Reddit</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+        .prose-custom { @apply text-slate-700 leading-relaxed; }
+        .prose-custom p { @apply my-2; }
+        .prose-custom a { @apply text-blue-600 hover:underline; }
+        .prose-custom blockquote { @apply border-l-4 border-slate-200 pl-4 italic text-slate-500 my-4; }
+        .prose-custom ul { @apply list-disc list-inside my-2; }
+        .prose-custom ol { @apply list-decimal list-inside my-2; }
+        .prose-custom pre { @apply bg-slate-100 p-3 rounded-md text-sm overflow-x-auto my-4; }
+    </style>
+</head>
+<body class="bg-slate-100 font-sans">
+
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-10">
+        <nav class="grid grid-cols-[1fr,minmax(0,theme(maxWidth.3xl)),1fr] px-4">
+            <div class="col-start-2 flex justify-between items-center gap-4 py-3">
+                <a href="#/" class="flex items-center space-x-3 flex-shrink-0">
+                    <svg class="h-8 w-8 text-orange-500" role="img" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg"><path d="M255.998 128.001c0 23.366-9.28 45.451-24.819 61.432-15.54 15.98-36.879 25.437-60.18 25.437-23.303 0-44.641-9.457-60.18-25.437-15.54-15.98-24.82-37.066-24.82-61.432s9.28-45.451 24.82-61.432C107.518 50.588 128.856 41.13 152 41.13c23.301 0 44.64 9.458 60.18 25.439 15.539 15.98 24.818 37.066 24.818 61.432zm-104-50.364c-5.891 0-10.667 4.776-10.667 10.667v42.667c0 5.89-4.776 10.666-10.666 10.666s-10.667-4.776-10.667-10.666V88.203c0-11.781-9.553-21.333-21.333-21.333s-21.333 9.552-21.333 21.333v21.334c0 23.563-19.103 42.666-42.667 42.666C13.251 152.203 0 165.454 0 180.87c0 15.415 13.251 28.667 31.333 28.667a42.593 42.593 0 0038.016-24.086c7.616-15.232 23.445-25.047 41.984-25.047 18.539 0 34.368 9.815 41.984 25.047A42.593 42.593 0 00191.333 209.537c18.082 0 32-13.252 32-28.667 0-15.416-13.918-28.667-32-28.667-23.564 0-42.667-19.103-42.667-42.666v-21.334c0-5.891-4.776-10.667-10.666-10.667zM64 128.001c-8.836 0-16 7.164-16 16s7.164 16 16 16 16-7.164 16-16-7.164-16-16-16zm96 0c-8.836 0-16 7.164-16 16s7.164 16 16 16 16-7.164 16-16-7.164-16-16-16z" fill-rule="evenodd" clip-rule="evenodd" fill="currentColor"/></svg>
+                </a>
+                <form id="search-form" class="flex-grow max-w-md"><div class="relative"><input type="search" id="search-input" class="w-full pl-4 pr-10 py-2 text-sm bg-slate-100 border border-transparent rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white focus:border-slate-300 transition"><button type="submit" class="absolute right-0 top-0 mt-2 mr-3" aria-label="Search"><svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg></button></div></form>
+            </div>
+        </nav>
+    </header>
+
+    <main class="max-w-3xl mx-auto py-8 px-4">
+        <!-- Subreddit Header Area (for subreddit view) -->
+        <div id="subreddit-header-area" class="mb-6"></div>
+        
+        <!-- Controls (for list views) -->
+        <div id="content-controls-area" class="mb-6">
+            <h2 id="context-header" class="text-xl font-bold text-slate-800 mb-3"></h2>
+            <div id="sort-controls" class="flex items-center gap-2 border-b border-slate-200 pb-2">
+                <button data-sort="hot" class="sort-btn px-3 py-1 text-sm font-semibold rounded-full">Hot</button>
+                <button data-sort="new" class="sort-btn px-3 py-1 text-sm font-semibold rounded-full">New</button>
+                <button data-sort="top" class="sort-btn px-3 py-1 text-sm font-semibold rounded-full">Top</button>
+            </div>
+        </div>
+        
+        <!-- View Containers -->
+        <div id="post-list-area" class="space-y-6"></div>
+        <div id="post-detail-area"></div>
+    </main>
+
+    <script>
+        const CORS_PROXY = "https://corsproxy.io/?url=";
+        const REDDIT_API_BASE = "https://www.reddit.com";
+        
+        let currentState = { view: 'home', subreddit: '', postId: '', query: '', sort: 'hot' };
+
+        const postListArea = document.getElementById('post-list-area');
+        const postDetailArea = document.getElementById('post-detail-area');
+        const searchForm = document.getElementById('search-form');
+        const searchInput = document.getElementById('search-input');
+        const contextHeader = document.getElementById('context-header');
+        const sortControls = document.getElementById('sort-controls');
+        const subredditHeaderArea = document.getElementById('subreddit-header-area');
+        const contentControlsArea = document.getElementById('content-controls-area');
+
+        // --- Utility & HTML Generation ---
+        const decodeHtml = (h) => { const t = document.createElement("textarea"); t.innerHTML = h; return t.value; };
+        const timeAgo = (utc) => { const s = Math.floor((new Date() - new Date(utc * 1000)) / 1000), i = { d: 86400, h: 3600, m: 60 }; if (s < 60) return `${s}s ago`; for (let u in i) { const v = Math.floor(s / i[u]); if (v >= 1) return `${v}${u} ago`; } };
+        const formatNumber = (n) => (n >= 1000 ? (n / 1000).toFixed(1) + 'k' : n.toString());
+        const createFlairHTML = (p) => { if (!p.link_flair_text) return ''; const c = p.link_flair_background_color || '#e2e8f0'; const t = p.link_flair_text_color === 'light' ? 'text-white' : 'text-slate-800'; return `<span class="text-xs font-semibold ${t} rounded px-2 py-0.5" style="background-color:${c};">${decodeHtml(p.link_flair_text)}</span>`; };
+        const createMediaHTML = (p, isDetailView = false) => { if (p.media?.reddit_video) return `<div class="mt-3"><video controls muted class="w-full rounded-lg bg-slate-200"><source src="${p.media.reddit_video.fallback_url}" type="video/mp4"></video></div>`; const i = p.url_overridden_by_dest; if (i && /\.(jpg|jpeg|png|gif)$/i.test(i)) return `<div class="mt-3"><img src="${i}" alt="${p.title}" class="max-h-[70vh] w-full object-contain rounded-lg ${isDetailView ? '' : 'bg-slate-50'}"></div>`; return ''; };
+        const createSelfTextHTML = (p, isDetailView = false) => { if (!p.is_self || !p.selftext_html) return ''; const truncationClass = isDetailView ? '' : 'max-h-48 overflow-hidden relative'; return `<div class="prose-custom text-sm mt-2 p-3 bg-slate-50 rounded-md border ${truncationClass}">${decodeHtml(p.selftext_html)}${isDetailView ? '' : '<div class="absolute bottom-0 left-0 w-full h-12 bg-gradient-to-t from-slate-50 to-transparent"></div>'}</div>`; };
+        const createThumbnailHTML = (p, h) => { if (h || !p.thumbnail || ['self', 'default', 'nsfw'].includes(p.thumbnail)) return ''; return `<div class="ml-4 flex-shrink-0 hidden sm:block"><img src="${p.thumbnail}" alt="Post thumbnail" class="w-24 h-20 object-cover rounded-md bg-slate-200"></div>`; };
+
+        const createCommentHTML = (comment) => {
+            if (comment.kind !== 't1') return ''; // Only render actual comments
+            const { author, score, created_utc, body_html, replies } = comment.data;
+            const nestedReplies = replies ? replies.data.children.map(createCommentHTML).join('') : '';
+            return `
+                <div class="comment pt-3 border-l-2 border-slate-200 hover:border-blue-400">
+                    <div class="text-xs text-slate-500 mb-1">
+                        <span class="font-semibold text-slate-700">${author}</span> • <span title="${new Date(created_utc * 1000)}">${timeAgo(created_utc)}</span> • <span>${formatNumber(score)} points</span>
+                    </div>
+                    <div class="prose-custom text-sm">${decodeHtml(body_html)}</div>
+                    <div class="replies pl-3 mt-2">${nestedReplies}</div>
+                </div>`;
+        };
+
+        const renderPostDetail = (postData, commentsData) => {
+            const p = postData;
+            postDetailArea.innerHTML = `
+                <div class="bg-white rounded-lg border border-slate-200 p-4">
+                    <div class="text-xs text-slate-500 flex items-center flex-wrap gap-x-2 mb-2"><a href="#/r/${p.subreddit}" class="font-bold text-slate-700 hover:underline">${p.subreddit_name_prefixed}</a> • <span>Posted by u/${p.author}</span> • <span>${timeAgo(p.created_utc)}</span></div>
+                    <h1 class="text-xl sm:text-2xl font-bold text-slate-800 mb-2 flex items-center gap-2">${decodeHtml(p.title)} ${createFlairHTML(p)}</h1>
+                    ${createSelfTextHTML(p, true)} ${createMediaHTML(p, true)}
+                    <div class="flex items-center space-x-4 text-sm font-medium text-slate-500 mt-4 border-t pt-3">
+                        <div class="flex items-center space-x-1"><svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg><span>${formatNumber(p.score)} Points</span></div>
+                        <div class="flex items-center space-x-1"><svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg><span>${formatNumber(p.num_comments)} Comments</span></div>
+                    </div>
+                </div>
+                <div id="comments-area" class="bg-white rounded-lg border border-slate-200 p-4 mt-6">
+                    <h3 class="text-lg font-bold mb-4">Comments</h3>
+                    ${commentsData.data.children.map(createCommentHTML).join('')}
+                </div>`;
+        };
+        
+        const renderPostList = (data) => {
+            postListArea.innerHTML = '';
+            const posts = data.data.children;
+            if (posts.length === 0) { postListArea.innerHTML = `<p class="text-slate-500 text-center">No posts found.</p>`; return; }
+            posts.forEach(child => {
+                const { data: p } = child;
+                const mainMedia = createMediaHTML(p);
+                // The title in the URL is for SEO/readability, it's not actually used by the router. Only the ID matters.
+                const postSlug = p.title.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+                const postURL = `#/r/${p.subreddit}/comments/${p.id}/${postSlug}`;
+                const postHTML = `
+                    <div class="bg-white rounded-lg border border-slate-200 flex overflow-hidden transition-all duration-200 hover:border-blue-500 hover:shadow-md hover:-translate-y-1">
+                        <div class="flex flex-col items-center p-2 sm:p-4 bg-slate-50 text-slate-600"><button aria-label="Upvote" class="p-1 rounded-md hover:bg-slate-200 hover:text-orange-500"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg></button><span class="font-bold text-sm text-slate-800 my-1">${formatNumber(p.ups)}</span><button aria-label="Downvote" class="p-1 rounded-md hover:bg-slate-200 hover:text-blue-600"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg></button></div>
+                        <div class="p-4 flex-1 flex justify-between items-start min-w-0">
+                            <div class="flex-1">
+                                <div class="text-xs text-slate-500 flex items-center flex-wrap gap-x-2 mb-2"><a href="#/r/${p.subreddit}" class="font-bold text-slate-700 hover:underline">${p.subreddit_name_prefixed}</a> • <span>Posted by u/${p.author}</span> • <span>${timeAgo(p.created_utc)}</span></div>
+                                <h2 class="text-lg sm:text-xl font-semibold text-slate-800 mb-2 flex items-center gap-2"><a href="${postURL}" class="hover:underline">${decodeHtml(p.title)}</a>${createFlairHTML(p)}</h2>
+                                ${createSelfTextHTML(p)} ${mainMedia}
+                                <div class="flex items-center space-x-4 text-sm font-medium text-slate-500 mt-3"><a href="${postURL}" class="flex items-center space-x-1 hover:bg-slate-100 p-2 rounded-md"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg><span>${formatNumber(p.num_comments)} Comments</span></a></div>
+                            </div>
+                            ${createThumbnailHTML(p, !!mainMedia)}
+                        </div>
+                    </div>`;
+                postListArea.insertAdjacentHTML('beforeend', postHTML);
+            });
+        };
+
+        const updateUI = () => {
+            const { view, subreddit, query } = currentState;
+            let headerText = '', searchPlaceholder = 'Search Reddit...', searchBarText = query || '';
+            
+            if (view === 'post') {
+                contentControlsArea.style.display = 'none';
+                subredditHeaderArea.style.display = 'none';
+                postListArea.style.display = 'none';
+                postDetailArea.style.display = 'block';
+                contextHeader.innerHTML = `<button onclick="window.history.back()" class="flex items-center text-blue-600 font-semibold hover:underline">&larr; Back</button>`;
+                return; // Post view has its own UI logic
+            }
+
+            postListArea.style.display = 'block';
+            postDetailArea.style.display = 'none';
+            contentControlsArea.style.display = 'block';
+
+            if (view === 'search') {
+                const scope = subreddit ? `in <span class="text-blue-600">r/${subreddit}</span>` : 'globally';
+                headerText = `Search results for <span class="text-blue-600">'${query}'</span> ${scope}`;
+                searchPlaceholder = subreddit ? `Search in r/${subreddit}...` : 'Search Reddit...';
+            } else if (view === 'subreddit') {
+                headerText = `Showing posts`; // The sub header has the name
+                searchPlaceholder = `Search in r/${subreddit}...`;
+            } else { // Home
+                headerText = `Showing posts from <span class="text-blue-600">r/popular</span>`;
+            }
+            contextHeader.innerHTML = headerText;
+            searchInput.placeholder = searchPlaceholder;
+            searchInput.value = searchBarText;
+            
+            document.querySelectorAll('.sort-btn').forEach(btn => {
+                const isSelected = btn.dataset.sort === currentState.sort;
+                btn.classList.toggle('bg-blue-600', isSelected); btn.classList.toggle('text-white', isSelected);
+            });
+        };
+
+        const loadContent = async () => {
+            updateUI(); // Set UI state first
+            let url;
+
+            // Handle Post Detail View
+            if (currentState.view === 'post') {
+                postDetailArea.innerHTML = `<p class="text-slate-500 text-center">Loading post...</p>`;
+                url = `${REDDIT_API_BASE}/r/${currentState.subreddit}/comments/${currentState.postId}.json`;
+                try {
+                    const response = await fetch(CORS_PROXY + url);
+                    if (!response.ok) throw new Error(`Network error`);
+                    const data = await response.json();
+                   // NEW - CORRECT
+renderPostDetail(data[0].data.children[0].data, data[1]);
+                } catch (error) { postDetailArea.innerHTML = `<p class="text-red-500 text-center">${error.message}</p>`; }
+                return;
+            }
+
+            // Handle Post List Views
+            postListArea.innerHTML = `<p class="text-slate-500 text-center">Loading...</p>`;
+            subredditHeaderArea.innerHTML = '';
+            
+            if (currentState.view === 'search') {
+                const path = currentState.subreddit ? `r/${currentState.subreddit}/` : '';
+                const restrict = currentState.subreddit ? '&restrict_sr=1' : '';
+                url = `${REDDIT_API_BASE}/${path}search.json?q=${encodeURIComponent(currentState.query)}&sort=${currentState.sort}${restrict}`;
+            } else {
+                const path = currentState.subreddit ? `r/${currentState.subreddit}/` : '';
+                url = `${REDDIT_API_BASE}/${path}${currentState.sort}.json`;
+            }
+            
+            try {
+                if (currentState.view === 'subreddit') {
+                    const aboutUrl = `${REDDIT_API_BASE}/r/${currentState.subreddit}/about.json`;
+                    const aboutRes = await fetch(CORS_PROXY + aboutUrl);
+                    if (aboutRes.ok) {
+                        const aboutData = await aboutRes.json();
+                        subredditHeaderArea.style.display = 'block';
+                        subredditHeaderArea.innerHTML = `<div class="bg-white rounded-lg border border-slate-200 overflow-hidden"><div class="h-24 bg-blue-500 bg-cover bg-center" style="background-image: url('${decodeHtml(aboutData.data.banner_background_image || '')}')"></div><div class="p-4"><div class="flex items-center -mt-12"><img src="${decodeHtml(aboutData.data.community_icon || aboutData.data.icon_img || '')}" alt="icon" class="w-20 h-20 rounded-full border-4 border-white bg-white shadow"><div class="ml-4"><h1 class="text-2xl font-bold text-slate-900">${aboutData.data.title}</h1><p class="text-sm text-slate-500 font-semibold">${aboutData.data.display_name_prefixed}</p></div></div><p class="text-sm text-slate-600 mt-3">${decodeHtml(aboutData.data.public_description)}</p></div></div>`;
+                    }
+                } else {
+                    subredditHeaderArea.style.display = 'none';
+                }
+                const postsRes = await fetch(CORS_PROXY + url);
+                if (!postsRes.ok) throw new Error(`Network error`);
+                const postsData = await postsRes.json();
+                renderPostList(postsData);
+            } catch (error) { postListArea.innerHTML = `<p class="text-red-500 text-center">${error.message}</p>`; }
+        };
+
+        const router = () => {
+            const hash = window.location.hash.substring(1);
+            const pathParts = hash.split('?')[0].split('/').filter(p => p);
+            const params = new URLSearchParams(hash.split('?')[1]);
+            
+            currentState = { subreddit: '', postId: '', query: '', sort: 'hot' }; // Reset
+            
+            if (pathParts[0] === 'r' && pathParts[2] === 'comments') {
+                currentState.view = 'post';
+                currentState.subreddit = pathParts[1];
+                currentState.postId = pathParts[3];
+            } else if (pathParts[0] === 'r') {
+                currentState.view = 'subreddit';
+                currentState.subreddit = pathParts[1];
+            } else if (pathParts[0] === 'search') {
+                currentState.view = 'search';
+                currentState.query = params.get('q');
+            } else {
+                currentState.view = 'home';
+            }
+            loadContent();
+        };
+
+        searchForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const term = searchInput.value.trim();
+            if (!term) return;
+            const subMatch = term.match(/^r\/([a-zA-Z0-9_]+)$/);
+            if (subMatch) {
+                window.location.hash = `#/${term}`;
+            } else if (currentState.subreddit && currentState.view !== 'search') {
+                window.location.hash = `#/r/${currentState.subreddit}/search?q=${encodeURIComponent(term)}`;
+            } else {
+                window.location.hash = `#/search?q=${encodeURIComponent(term)}`;
+            }
+        });
+
+        sortControls.addEventListener('click', (e) => {
+            if (e.target.matches('.sort-btn')) {
+                currentState.sort = e.target.dataset.sort;
+                loadContent();
+            }
+        });
+
+        window.addEventListener('hashchange', router);
+        window.addEventListener('DOMContentLoaded', router);
+    </script>
+</body>
+</html>
